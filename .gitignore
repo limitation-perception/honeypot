@@ -1,3 +1,4 @@
 build/
 *.db
 report.html
+compile_commands.json

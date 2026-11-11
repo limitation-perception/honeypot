@@ -3,10 +3,18 @@ CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror -
 LDFLAGS :=
 LDLIBS  := -lpthread
 
-ifeq ($(SAN),1)
-BUILD   := build/san
-CFLAGS  += -fsanitize=address,undefined -fno-omit-frame-pointer
-LDFLAGS += -fsanitize=address,undefined
+ifeq ($(SAN),address)
+SANFLAGS := -fsanitize=address,undefined
+else ifeq ($(SAN),thread)
+SANFLAGS := -fsanitize=thread
+else ifneq ($(SAN),)
+$(error SAN must be 'address' or 'thread', got '$(SAN)')
+endif
+
+ifdef SANFLAGS
+BUILD   := build/$(SAN)
+CFLAGS  += $(SANFLAGS) -fno-omit-frame-pointer
+LDFLAGS += $(SANFLAGS)
 else
 BUILD   := build
 endif
@@ -23,7 +31,19 @@ UNITY_OBJ := $(BUILD)/tests/unity/unity.o
 .PHONY: all test clean
 .SECONDARY:
 
-all: $(BIN)
+all: $(BIN) compile_commands.json
+
+DB_FLAGS := $(filter-out -MMD -MP,$(CFLAGS))
+
+compile_commands.json: Makefile $(SRCS) $(TEST_SRCS)
+	@{ echo '['; sep=' '; \
+	  for f in $(SRCS); do \
+	    printf '%s{"directory":"%s","file":"%s","command":"$(CC) $(DB_FLAGS) -c %s"}\n' "$$sep" "$(CURDIR)" "$$f" "$$f"; sep=','; \
+	  done; \
+	  for f in $(TEST_SRCS); do \
+	    printf '%s{"directory":"%s","file":"%s","command":"$(CC) $(DB_FLAGS) -Itests/unity -c %s"}\n' "$$sep" "$(CURDIR)" "$$f" "$$f"; \
+	  done; \
+	  echo ']'; } > $@
 
 $(BIN): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -42,7 +62,7 @@ $(BUILD)/tests/test_%: $(BUILD)/tests/test_%.o $(LIB_OBJS) $(UNITY_OBJ)
 $(BUILD)/tests/%.o: CFLAGS += -Itests/unity
 
 test: $(TEST_BINS)
-	@fail=0; for t in $^; do echo "== $$t"; ./$$t || fail=1; done; exit $$fail
+	@fail=0; for t in $^; do echo "== $$t"; timeout 60 ./$$t || fail=1; done; exit $$fail
 
 clean:
 	rm -rf build
