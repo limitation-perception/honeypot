@@ -1,21 +1,16 @@
-#include <sqlite3.h>
-#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "unity.h"
+#include "db_check.h"
 #include "storage/db.h"
 
-static char path[] = "/tmp/honeytrap_test_XXXXXX";
+static char path[TEMP_DB_PATH_LEN];
 static struct db *db;
 static sqlite3 *check;
 
 void setUp(void)
 {
-    strcpy(path, "/tmp/honeytrap_test_XXXXXX");
-    int fd = mkstemp(path);
-    TEST_ASSERT_TRUE(fd >= 0);
-    close(fd);
+    make_temp_db_path(path);
     db = db_open(path);
     TEST_ASSERT_NOT_NULL(db);
     TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(path, &check));
@@ -26,26 +21,6 @@ void tearDown(void)
     db_close(db);
     sqlite3_close(check);
     unlink(path);
-}
-
-static long long query_int(const char *sql)
-{
-    sqlite3_stmt *st;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SQLITE_OK, sqlite3_prepare_v2(check, sql, -1, &st, NULL), sql);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SQLITE_ROW, sqlite3_step(st), sql);
-    long long v = sqlite3_column_int64(st, 0);
-    sqlite3_finalize(st);
-    return v;
-}
-
-static void query_text(const char *sql, char *out, size_t size)
-{
-    sqlite3_stmt *st;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SQLITE_OK, sqlite3_prepare_v2(check, sql, -1, &st, NULL), sql);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(SQLITE_ROW, sqlite3_step(st), sql);
-    const unsigned char *s = sqlite3_column_text(st, 0);
-    snprintf(out, size, "%s", s ? (const char *)s : "(null)");
-    sqlite3_finalize(st);
 }
 
 static struct incident make_incident(void)
@@ -80,11 +55,11 @@ static void test_insert_incident_sets_id(void)
     TEST_ASSERT_TRUE(inc.id > 0);
 
     char buf[64];
-    query_text("SELECT src_ip FROM incidents", buf, sizeof buf);
+    query_text(check, "SELECT src_ip FROM incidents", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("45.1.2.3", buf);
-    query_text("SELECT level FROM incidents", buf, sizeof buf);
+    query_text(check, "SELECT level FROM incidents", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("LOW", buf);
-    TEST_ASSERT_EQUAL_INT64(1000, query_int("SELECT first_seen FROM incidents"));
+    TEST_ASSERT_EQUAL_INT64(1000, query_int(check, "SELECT first_seen FROM incidents"));
 }
 
 static void test_update_incident(void)
@@ -100,11 +75,11 @@ static void test_update_incident(void)
     TEST_ASSERT_EQUAL_INT64(id, inc.id);
 
     char buf[64];
-    query_text("SELECT level FROM incidents", buf, sizeof buf);
+    query_text(check, "SELECT level FROM incidents", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("HIGH", buf);
-    TEST_ASSERT_EQUAL_INT64(1, query_int("SELECT COUNT(*) FROM incidents"));
-    TEST_ASSERT_EQUAL_INT64(7, query_int("SELECT event_count FROM incidents"));
-    TEST_ASSERT_EQUAL_INT64(2000, query_int("SELECT last_seen FROM incidents"));
+    TEST_ASSERT_EQUAL_INT64(1, query_int(check, "SELECT COUNT(*) FROM incidents"));
+    TEST_ASSERT_EQUAL_INT64(7, query_int(check, "SELECT event_count FROM incidents"));
+    TEST_ASSERT_EQUAL_INT64(2000, query_int(check, "SELECT last_seen FROM incidents"));
 }
 
 static void test_update_missing_incident_fails(void)
@@ -129,16 +104,16 @@ static void test_insert_event_fields(void)
     TEST_ASSERT_EQUAL_INT(0, db_insert_event(db, &ev, inc.id));
 
     char buf[64];
-    query_text("SELECT type FROM events", buf, sizeof buf);
+    query_text(check, "SELECT type FROM events", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("LOGIN_ATTEMPT", buf);
-    query_text("SELECT source FROM events", buf, sizeof buf);
+    query_text(check, "SELECT source FROM events", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("honeypot", buf);
-    query_text("SELECT username || ':' || password FROM events", buf, sizeof buf);
+    query_text(check, "SELECT username || ':' || password FROM events", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING("root:123456", buf);
-    TEST_ASSERT_EQUAL_INT64(inc.id, query_int("SELECT incident_id FROM events"));
-    TEST_ASSERT_EQUAL_INT64(1234, query_int("SELECT timestamp FROM events"));
-    TEST_ASSERT_EQUAL_INT64(2222, query_int("SELECT dst_port FROM events"));
-    TEST_ASSERT_EQUAL_INT64(9, query_int("SELECT session_id FROM events"));
+    TEST_ASSERT_EQUAL_INT64(inc.id, query_int(check, "SELECT incident_id FROM events"));
+    TEST_ASSERT_EQUAL_INT64(1234, query_int(check, "SELECT timestamp FROM events"));
+    TEST_ASSERT_EQUAL_INT64(2222, query_int(check, "SELECT dst_port FROM events"));
+    TEST_ASSERT_EQUAL_INT64(9, query_int(check, "SELECT session_id FROM events"));
 }
 
 static void test_event_without_incident(void)
@@ -146,7 +121,7 @@ static void test_event_without_incident(void)
     struct event ev;
     event_init(&ev, EV_PORT_SCAN, EV_SOURCE_IDS, "10.0.0.1");
     TEST_ASSERT_EQUAL_INT(0, db_insert_event(db, &ev, 0));
-    TEST_ASSERT_EQUAL_INT64(1, query_int("SELECT COUNT(*) FROM events WHERE incident_id IS NULL"));
+    TEST_ASSERT_EQUAL_INT64(1, query_int(check, "SELECT COUNT(*) FROM events WHERE incident_id IS NULL"));
 }
 
 static void test_event_with_missing_incident_fails(void)
@@ -154,7 +129,7 @@ static void test_event_with_missing_incident_fails(void)
     struct event ev;
     event_init(&ev, EV_PORT_SCAN, EV_SOURCE_IDS, "10.0.0.1");
     TEST_ASSERT_EQUAL_INT(-1, db_insert_event(db, &ev, 999));
-    TEST_ASSERT_EQUAL_INT64(0, query_int("SELECT COUNT(*) FROM events"));
+    TEST_ASSERT_EQUAL_INT64(0, query_int(check, "SELECT COUNT(*) FROM events"));
 }
 
 static void test_sql_injection_stored_as_text(void)
@@ -166,9 +141,9 @@ static void test_sql_injection_stored_as_text(void)
     TEST_ASSERT_EQUAL_INT(0, db_insert_event(db, &ev, 0));
 
     char buf[64];
-    query_text("SELECT password FROM events", buf, sizeof buf);
+    query_text(check, "SELECT password FROM events", buf, sizeof buf);
     TEST_ASSERT_EQUAL_STRING(evil, buf);
-    TEST_ASSERT_EQUAL_INT64(1, query_int("SELECT COUNT(*) FROM events"));
+    TEST_ASSERT_EQUAL_INT64(1, query_int(check, "SELECT COUNT(*) FROM events"));
 }
 
 static void test_unterminated_field_is_bounded(void)
@@ -177,7 +152,7 @@ static void test_unterminated_field_is_bounded(void)
     event_init(&ev, EV_COMMAND, EV_SOURCE_HONEYPOT, "1.1.1.1");
     memset(ev.username, 'A', sizeof ev.username);
     TEST_ASSERT_EQUAL_INT(0, db_insert_event(db, &ev, 0));
-    TEST_ASSERT_EQUAL_INT64(EV_USER_LEN, query_int("SELECT length(username) FROM events"));
+    TEST_ASSERT_EQUAL_INT64(EV_USER_LEN, query_int(check, "SELECT length(username) FROM events"));
 }
 
 static void test_reopen_keeps_data(void)
@@ -188,7 +163,7 @@ static void test_reopen_keeps_data(void)
 
     db = db_open(path);
     TEST_ASSERT_NOT_NULL(db);
-    TEST_ASSERT_EQUAL_INT64(1, query_int("SELECT COUNT(*) FROM incidents"));
+    TEST_ASSERT_EQUAL_INT64(1, query_int(check, "SELECT COUNT(*) FROM incidents"));
 }
 
 int main(void)

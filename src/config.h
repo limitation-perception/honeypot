@@ -17,6 +17,7 @@ struct config {
     int  ids_synflood_window_sec;
 
     int  core_queue_capacity;
+    int  core_incident_timeout_sec;
     char storage_db_path[CFG_STR_LEN];
     char storage_report_path[CFG_STR_LEN];
 };
