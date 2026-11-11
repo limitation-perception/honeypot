@@ -41,6 +41,13 @@ static void test_set_str_null(void)
     TEST_ASSERT_EQUAL_STRING("", buf);
 }
 
+static void test_source_name(void)
+{
+    TEST_ASSERT_EQUAL_STRING("honeypot", event_source_name(EV_SOURCE_HONEYPOT));
+    TEST_ASSERT_EQUAL_STRING("ids", event_source_name(EV_SOURCE_IDS));
+    TEST_ASSERT_EQUAL_STRING("UNKNOWN", event_source_name((event_source_t)42));
+}
+
 static void test_init(void)
 {
     struct event ev;
@@ -62,6 +69,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_type_name_known);
     RUN_TEST(test_type_name_invalid);
+    RUN_TEST(test_source_name);
     RUN_TEST(test_set_str_fits);
     RUN_TEST(test_set_str_truncates);
     RUN_TEST(test_set_str_null);

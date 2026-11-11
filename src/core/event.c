@@ -39,3 +39,14 @@ const char *event_type_name(event_type_t type)
         return "UNKNOWN";
     return type_names[type];
 }
+
+const char *event_source_name(event_source_t source)
+{
+    switch (source) {
+    case EV_SOURCE_HONEYPOT:
+        return "honeypot";
+    case EV_SOURCE_IDS:
+        return "ids";
+    }
+    return "UNKNOWN";
+}
