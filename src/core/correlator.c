@@ -163,7 +163,11 @@ static void sanitize(char *dst, size_t dst_size, const char *src, size_t src_siz
 
 static void describe(char *out, size_t size, const struct event *ev)
 {
-    if (ev->type == EV_LOGIN_ATTEMPT || ev->type == EV_LOGIN_SUCCESS) {
+    if (ev->type == EV_LOGIN_SUCCESS) {
+        char user[EV_USER_LEN];
+        sanitize(user, sizeof user, ev->username, sizeof ev->username);
+        snprintf(out, size, "user='%s'", user);
+    } else if (ev->type == EV_LOGIN_ATTEMPT) {
         char user[EV_USER_LEN];
         char pass[EV_PASS_LEN];
         sanitize(user, sizeof user, ev->username, sizeof ev->username);

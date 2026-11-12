@@ -128,3 +128,10 @@ void queue_close(struct event_queue *q)
     CHECK_PTHREAD(pthread_cond_broadcast(&q->not_full));
     CHECK_PTHREAD(pthread_mutex_unlock(&q->lock));
 }
+
+void queue_sink(const struct event *ev, void *queue)
+{
+    if (queue_push(queue, ev) != 0)
+        LOG_WARN("queue is closed, dropped %s event from %.*s",
+                 event_type_name(ev->type), EV_IP_LEN - 1, ev->src_ip);
+}
