@@ -14,4 +14,6 @@ int  queue_push(struct event_queue *q, const struct event *ev);
 int  queue_pop(struct event_queue *q, struct event *out);
 void queue_close(struct event_queue *q);
 
+void queue_sink(const struct event *ev, void *queue);
+
 #endif

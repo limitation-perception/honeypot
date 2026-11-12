@@ -205,9 +205,22 @@ static void test_close_wakes_producer(void)
     TEST_ASSERT_EQUAL_INT(-1, queue_pop(q, &ev));
 }
 
+static void test_sink_pushes_and_survives_close(void)
+{
+    q = queue_create(4);
+    TEST_ASSERT_NOT_NULL(q);
+    struct event ev = make_event(5);
+    queue_sink(&ev, q);
+    queue_close(q);
+    queue_sink(&ev, q);
+    pop_expect(5);
+    TEST_ASSERT_EQUAL_INT(-1, queue_pop(q, &ev));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_sink_pushes_and_survives_close);
     RUN_TEST(test_create_zero_capacity);
     RUN_TEST(test_fifo);
     RUN_TEST(test_wraparound);
