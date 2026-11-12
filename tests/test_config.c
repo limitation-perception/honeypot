@@ -23,6 +23,7 @@ static void test_valid_file(void)
     TEST_ASSERT_EQUAL_INT(500, cfg.ids_synflood_syns);
     TEST_ASSERT_EQUAL_INT(2, cfg.ids_synflood_window_sec);
     TEST_ASSERT_EQUAL_INT(64, cfg.core_queue_capacity);
+    TEST_ASSERT_EQUAL_INT(600, cfg.core_incident_timeout_sec);
     TEST_ASSERT_EQUAL_STRING("test.db", cfg.storage_db_path);
     TEST_ASSERT_EQUAL_STRING("out.html", cfg.storage_report_path);
 }

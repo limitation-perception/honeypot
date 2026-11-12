@@ -47,4 +47,6 @@ void event_set_str(char *dst, size_t dst_size, const char *src);
 
 const char *event_type_name(event_type_t type);
 
+const char *event_source_name(event_source_t source);
+
 #endif

@@ -33,6 +33,7 @@ static const struct option_def options[] = {
     INT_OPT("ids.synflood_syns",       ids_synflood_syns,       1, INT_MAX),
     INT_OPT("ids.synflood_window_sec", ids_synflood_window_sec, 1, 3600),
     INT_OPT("core.queue_capacity",     core_queue_capacity,     1, 1000000),
+    INT_OPT("core.incident_timeout_sec", core_incident_timeout_sec, 1, 30 * 24 * 3600),
     STR_OPT("storage.db_path",         storage_db_path),
     STR_OPT("storage.report_path",     storage_report_path),
 };
@@ -49,6 +50,7 @@ void config_set_defaults(struct config *cfg)
     cfg->ids_synflood_syns = 100;
     cfg->ids_synflood_window_sec = 1;
     cfg->core_queue_capacity = 1024;
+    cfg->core_incident_timeout_sec = 3600;
     snprintf(cfg->storage_db_path, sizeof cfg->storage_db_path, "%s", "honeytrap.db");
     snprintf(cfg->storage_report_path, sizeof cfg->storage_report_path, "%s", "report.html");
 }
