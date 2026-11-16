@@ -6,12 +6,15 @@ void tearDown(void) {}
 
 static void test_counts_all_packets(void)
 {
-    TEST_ASSERT_EQUAL_INT64(400, capture_read_file("samples/portscan.pcap"));
+    struct capture_stats st;
+    TEST_ASSERT_EQUAL_INT(0, capture_read_file("samples/portscan.pcap", &st));
+    TEST_ASSERT_EQUAL_INT64(400, st.packets);
 }
 
 static void test_missing_file(void)
 {
-    TEST_ASSERT_EQUAL_INT64(-1, capture_read_file("samples/no-such-file.pcap"));
+    struct capture_stats st;
+    TEST_ASSERT_EQUAL_INT(-1, capture_read_file("samples/no-such-file.pcap", &st));
 }
 
 int main(void)
