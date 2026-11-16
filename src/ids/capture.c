@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pcap/pcap.h>
 #include "core/log.h"
+#include "ids/parser.h"
 
 int capture_read_file(const char *path, struct capture_stats *stats)
 {
@@ -20,6 +21,14 @@ int capture_read_file(const char *path, struct capture_stats *stats)
     int rc;
     while ((rc = pcap_next_ex(p, &hdr, &data)) == 1) {
         stats->packets++;
+
+        struct packet pkt;
+        if (parse_ethernet(data, hdr->caplen, &pkt) != 0) {
+            stats->bad++;
+            continue;
+        }
+        if (pkt.ethertype == ETHERTYPE_IPV4)
+            stats->ipv4++;
     }
 
     int result = 0;
