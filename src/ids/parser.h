@@ -1,5 +1,6 @@
 #ifndef IDS_PARSER_H
 #define IDS_PARSER_H
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -9,6 +10,12 @@
 #define ETHERTYPE_ARP  0x0806
 #define IP_PROTO_TCP 6
 #define IP_PROTO_UDP 17
+#define TCP_FIN 0x01
+#define TCP_SYN 0x02
+#define TCP_RST 0x04
+#define TCP_PSH 0x08
+#define TCP_ACK 0x10
+#define TCP_URG 0x20
 
 struct packet {
     uint8_t  eth_dst[MAC_LEN];
@@ -19,6 +26,12 @@ struct packet {
     uint32_t ip_src;
     uint32_t ip_dst;
     uint8_t  ip_proto;
+
+    bool     has_tcp;
+    bool     has_udp;
+    uint16_t src_port;
+    uint16_t dst_port;
+    uint8_t  tcp_flags;
 };
 
 int parse_ethernet(const uint8_t *data, size_t len, struct packet *out);
