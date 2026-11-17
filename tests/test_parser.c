@@ -9,7 +9,16 @@ static const uint8_t ARP_FRAME[] = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
     0x02, 0x00, 0x00, 0x00, 0x00, 0x66,
     0x08, 0x06,
+
+    0x00, 0x01, 0x08, 0x00,
+    0x06, 0x04, 0x00, 0x01,
+    0x02, 0x00, 0x00, 0x00, 0x00, 0x66,
+    0x0a, 0x00, 0x00, 0x42,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x0a, 0x00, 0x00, 0x01,
 };
+
+#define ARP_START 14
 
 static const uint8_t SYN_FRAME[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -17,7 +26,7 @@ static const uint8_t SYN_FRAME[] = {
     0x08, 0x00,
 
     0x45, 0x00, 0x00, 0x2c,
-    0x3d, 0x1a, 0x00, 0x00, 
+    0x3d, 0x1a, 0x00, 0x00,
     0x35, 0x06, 0x4a, 0xb0,
     0x7f, 0x00, 0x00, 0x01,
     0x7f, 0x00, 0x00, 0x01,
@@ -189,6 +198,38 @@ static void test_udp_too_short(void)
     TEST_ASSERT_EQUAL_INT(-1, parse_ethernet(UDP_FRAME, sizeof UDP_FRAME - 1, &p));
 }
 
+static void test_arp_request(void)
+{
+    struct packet p;
+    TEST_ASSERT_EQUAL_INT(0, parse_ethernet(ARP_FRAME, sizeof ARP_FRAME, &p));
+    TEST_ASSERT_TRUE(p.has_arp);
+    TEST_ASSERT_FALSE(p.has_ipv4);
+    TEST_ASSERT_EQUAL_UINT16(ARP_OP_REQUEST, p.arp_op);
+
+    const uint8_t sender[MAC_LEN] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x66 };
+    TEST_ASSERT_EQUAL_MEMORY(sender, p.arp_sha, MAC_LEN);
+    TEST_ASSERT_EQUAL_HEX32(0x0a000042, p.arp_spa);
+    TEST_ASSERT_EQUAL_HEX32(0x0a000001, p.arp_tpa);
+}
+
+static void test_arp_too_short(void)
+{
+    struct packet p;
+    TEST_ASSERT_EQUAL_INT(-1, parse_ethernet(ARP_FRAME, sizeof ARP_FRAME - 1, &p));
+    TEST_ASSERT_FALSE(p.has_arp);
+}
+
+static void test_arp_for_other_networks_is_skipped(void)
+{
+    struct packet p;
+    uint8_t frame[sizeof ARP_FRAME];
+    memcpy(frame, ARP_FRAME, sizeof frame);
+
+    frame[ARP_START + 1] = 6;
+    TEST_ASSERT_EQUAL_INT(0, parse_ethernet(frame, sizeof frame, &p));
+    TEST_ASSERT_FALSE(p.has_arp);
+}
+
 static void test_ipv4_to_str(void)
 {
     char buf[16];
@@ -215,6 +256,9 @@ int main(void)
     RUN_TEST(test_non_first_fragment_has_no_ports);
     RUN_TEST(test_udp_header);
     RUN_TEST(test_udp_too_short);
+    RUN_TEST(test_arp_request);
+    RUN_TEST(test_arp_too_short);
+    RUN_TEST(test_arp_for_other_networks_is_skipped);
     RUN_TEST(test_ipv4_to_str);
     return UNITY_END();
 }
