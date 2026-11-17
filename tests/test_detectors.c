@@ -96,11 +96,81 @@ static void test_below_threshold(void)
     TEST_ASSERT_EQUAL_INT(0, nevents);
 }
 
+static void test_slow_scan_is_not_detected(void)
+{
+    scan(T0, ATTACKER, 40, 200 * MS);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_same_port_many_times(void)
+{
+    for (int i = 0; i < 500; i++)
+        tcp(T0 + i * MS, ATTACKER, VICTIM, 80, TCP_SYN);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_ack_and_rst_are_not_probes(void)
+{
+    for (int i = 0; i < 100; i++) {
+        tcp(T0 + i * MS, ATTACKER, VICTIM, (uint16_t)(1000 + i), TCP_ACK);
+        tcp(T0 + i * MS, ATTACKER, VICTIM, (uint16_t)(2000 + i), TCP_SYN | TCP_ACK);
+        tcp(T0 + i * MS, ATTACKER, VICTIM, (uint16_t)(3000 + i), TCP_RST);
+    }
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_stealth_scans(void)
+{
+    const uint8_t kinds[] = { TCP_FIN, 0, TCP_FIN | TCP_PSH | TCP_URG };
+    for (int k = 0; k < 3; k++)
+        for (int i = 0; i < 20; i++)
+            tcp(T0 + i * MS, ATTACKER + (uint32_t)k, VICTIM, (uint16_t)(100 + i), kinds[k]);
+    TEST_ASSERT_EQUAL_INT(3, nevents);
+}
+
+static void test_long_scan_reported_once(void)
+{
+    scan(T0, ATTACKER, 1000, 1 * MS);
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+}
+
+static void test_new_scan_after_silence(void)
+{
+    scan(T0, ATTACKER, 20, MS);
+    scan(T0 + 10 * SEC, ATTACKER, 20, MS);
+    TEST_ASSERT_EQUAL_INT(2, nevents);
+}
+
+static void test_scanners_are_separate(void)
+{
+    for (int i = 0; i < 10; i++) {
+        tcp(T0 + i * MS, ATTACKER, VICTIM, (uint16_t)(1 + i), TCP_SYN);
+        tcp(T0 + i * MS, ATTACKER + 1, VICTIM, (uint16_t)(100 + i), TCP_SYN);
+    }
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_many_ips_do_not_break_tracking(void)
+{
+    for (uint32_t i = 0; i < 10000; i++)
+        tcp(T0 + i, 0x64000000u + i, VICTIM, 80, TCP_SYN);
+    scan(T0 + 10 * SEC, ATTACKER, 20, MS);
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_create_rejects_bad_input);
     RUN_TEST(test_port_scan_detected);
     RUN_TEST(test_below_threshold);
+    RUN_TEST(test_slow_scan_is_not_detected);
+    RUN_TEST(test_same_port_many_times);
+    RUN_TEST(test_ack_and_rst_are_not_probes);
+    RUN_TEST(test_stealth_scans);
+    RUN_TEST(test_long_scan_reported_once);
+    RUN_TEST(test_new_scan_after_silence);
+    RUN_TEST(test_scanners_are_separate);
+    RUN_TEST(test_many_ips_do_not_break_tracking);
     return UNITY_END();
 }
