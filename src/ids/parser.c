@@ -41,10 +41,23 @@ struct udp_hdr {
     uint16_t checksum;
 };
 
+struct arp_hdr {
+    uint16_t htype;
+    uint16_t ptype;
+    uint8_t  hlen;
+    uint8_t  plen;
+    uint16_t op;
+    uint8_t  sha[MAC_LEN];
+    uint8_t  spa[4];
+    uint8_t  tha[MAC_LEN];
+    uint8_t  tpa[4];
+};
+
 _Static_assert(sizeof(struct eth_hdr) == 14, "eth_hdr must be exactly 14 bytes");
 _Static_assert(sizeof(struct ipv4_hdr) == 20, "ipv4_hdr must be exactly 20 bytes");
 _Static_assert(sizeof(struct tcp_hdr) == 20, "tcp_hdr must be exactly 20 bytes");
 _Static_assert(sizeof(struct udp_hdr) == 8, "udp_hdr must be exactly 8 bytes");
+_Static_assert(sizeof(struct arp_hdr) == 28, "arp_hdr must be exactly 28 bytes");
 
 #define IP_FRAG_OFFSET_MASK 0x1FFF
 
@@ -76,6 +89,30 @@ static int parse_udp(const uint8_t *data, size_t len, struct packet *out)
     out->src_port = ntohs(udp.src_port);
     out->dst_port = ntohs(udp.dst_port);
     out->has_udp = true;
+    return 0;
+}
+
+static uint32_t ip_from_bytes(const uint8_t b[4])
+{
+    return (uint32_t)b[0] << 24 | (uint32_t)b[1] << 16 | (uint32_t)b[2] << 8 | b[3];
+}
+
+static int parse_arp(const uint8_t *data, size_t len, struct packet *out)
+{
+    struct arp_hdr arp;
+    if (len < sizeof arp)
+        return -1;
+    memcpy(&arp, data, sizeof arp);
+
+    if (ntohs(arp.htype) != 1 || ntohs(arp.ptype) != ETHERTYPE_IPV4 ||
+        arp.hlen != MAC_LEN || arp.plen != 4)
+        return 0;
+
+    out->arp_op = ntohs(arp.op);
+    memcpy(out->arp_sha, arp.sha, MAC_LEN);
+    out->arp_spa = ip_from_bytes(arp.spa);
+    out->arp_tpa = ip_from_bytes(arp.tpa);
+    out->has_arp = true;
     return 0;
 }
 
@@ -124,8 +161,13 @@ int parse_ethernet(const uint8_t *data, size_t len, struct packet *out)
     memcpy(out->eth_src, eth.src, MAC_LEN);
     out->ethertype = ntohs(eth.type);
 
+    const uint8_t *payload = data + sizeof eth;
+    size_t payload_len = len - sizeof eth;
+
     if (out->ethertype == ETHERTYPE_IPV4)
-        return parse_ipv4(data + sizeof eth, len - sizeof eth, out);
+        return parse_ipv4(payload, payload_len, out);
+    if (out->ethertype == ETHERTYPE_ARP)
+        return parse_arp(payload, payload_len, out);
     return 0;
 }
 

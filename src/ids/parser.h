@@ -8,6 +8,8 @@
 #define MAC_LEN 6
 #define ETHERTYPE_IPV4 0x0800
 #define ETHERTYPE_ARP  0x0806
+#define ARP_OP_REQUEST 1
+#define ARP_OP_REPLY   2
 #define IP_PROTO_TCP 6
 #define IP_PROTO_UDP 17
 #define TCP_FIN 0x01
@@ -32,6 +34,12 @@ struct packet {
     uint16_t src_port;
     uint16_t dst_port;
     uint8_t  tcp_flags;
+    
+    bool     has_arp;
+    uint16_t arp_op;
+    uint8_t  arp_sha[MAC_LEN];
+    uint32_t arp_spa;
+    uint32_t arp_tpa;
 };
 
 int parse_ethernet(const uint8_t *data, size_t len, struct packet *out);
