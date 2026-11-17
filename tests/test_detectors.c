@@ -58,6 +58,15 @@ static void tcp(int64_t t, uint32_t src, uint32_t dst, uint16_t port, uint8_t fl
     detectors_feed(d, &p, t);
 }
 
+static int count_type(event_type_t type)
+{
+    int n = 0;
+    for (int i = 0; i < nevents && i < MAX_EVENTS; i++)
+        if (events[i].type == type)
+            n++;
+    return n;
+}
+
 static void scan(int64_t start, uint32_t src, int ports, int64_t step)
 {
     for (int i = 0; i < ports; i++)
@@ -106,7 +115,7 @@ static void test_same_port_many_times(void)
 {
     for (int i = 0; i < 500; i++)
         tcp(T0 + i * MS, ATTACKER, VICTIM, 80, TCP_SYN);
-    TEST_ASSERT_EQUAL_INT(0, nevents);
+    TEST_ASSERT_EQUAL_INT(0, count_type(EV_PORT_SCAN));
 }
 
 static void test_ack_and_rst_are_not_probes(void)
@@ -155,7 +164,93 @@ static void test_many_ips_do_not_break_tracking(void)
     for (uint32_t i = 0; i < 10000; i++)
         tcp(T0 + i, 0x64000000u + i, VICTIM, 80, TCP_SYN);
     scan(T0 + 10 * SEC, ATTACKER, 20, MS);
+    TEST_ASSERT_EQUAL_INT(1, count_type(EV_PORT_SCAN));
+}
+
+static void flood(int64_t start, uint32_t src, int count, int64_t step)
+{
+    for (int i = 0; i < count; i++)
+        tcp(start + i * step, src, VICTIM, 8080, TCP_SYN);
+}
+
+static void test_syn_flood_detected(void)
+{
+    flood(T0, ATTACKER, 100, 5 * MS);
+
     TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL(EV_SYN_FLOOD, events[0].type);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.66", events[0].src_ip);
+    TEST_ASSERT_EQUAL_UINT16(8080, events[0].dst_port);
+    TEST_ASSERT_EQUAL_STRING("100 SYN to 10.0.0.2:8080 in 1s from 1 source", events[0].details);
+}
+
+static void test_flood_below_threshold(void)
+{
+    flood(T0, ATTACKER, 99, 5 * MS);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_syn_rate_too_low(void)
+{
+    flood(T0, ATTACKER, 300, 11 * MS);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_long_flood_reported_once(void)
+{
+    flood(T0, ATTACKER, 5000, 1 * MS);
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+}
+
+static void test_flood_again_after_pause(void)
+{
+    flood(T0, ATTACKER, 200, MS);
+    flood(T0 + 60 * SEC, ATTACKER, 200, MS);
+    TEST_ASSERT_EQUAL_INT(2, nevents);
+}
+
+static void test_spoofed_flood(void)
+{
+    for (int i = 0; i < 150; i++)
+        tcp(T0 + i * MS, 0x01020000u + (uint32_t)i * 7919, VICTIM, 80, TCP_SYN);
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL(EV_SYN_FLOOD, events[0].type);
+    TEST_ASSERT_NOT_NULL(strstr(events[0].details, "8+ sources (spoofed?)"));
+}
+
+static void test_flood_blames_top_source(void)
+{
+    for (int i = 0; i < 100; i++)
+        tcp(T0 + i * MS, (i % 4 == 0) ? VICTIM + 100 : ATTACKER, VICTIM, 80, TCP_SYN);
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.66", events[0].src_ip);
+    TEST_ASSERT_NOT_NULL(strstr(events[0].details, "from 2 sources"));
+}
+
+static void test_syn_ack_is_not_flood(void)
+{
+    for (int i = 0; i < 500; i++)
+        tcp(T0 + i * MS, ATTACKER, VICTIM, 80, TCP_SYN | TCP_ACK);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_fast_scan_is_not_flood(void)
+{
+    for (int i = 0; i < 1000; i++)
+        tcp(T0 + i * 100, ATTACKER, VICTIM, (uint16_t)(1 + i), TCP_SYN);
+    TEST_ASSERT_EQUAL_INT(1, count_type(EV_PORT_SCAN));
+    TEST_ASSERT_EQUAL_INT(0, count_type(EV_SYN_FLOOD));
+}
+
+static void test_floods_on_two_ports_are_separate(void)
+{
+    for (int i = 0; i < 100; i++) {
+        tcp(T0 + i * MS, ATTACKER, VICTIM, 80, TCP_SYN);
+        tcp(T0 + i * MS, ATTACKER, VICTIM, 443, TCP_SYN);
+    }
+    TEST_ASSERT_EQUAL_INT(2, count_type(EV_SYN_FLOOD));
 }
 
 int main(void)
@@ -172,5 +267,15 @@ int main(void)
     RUN_TEST(test_new_scan_after_silence);
     RUN_TEST(test_scanners_are_separate);
     RUN_TEST(test_many_ips_do_not_break_tracking);
+    RUN_TEST(test_syn_flood_detected);
+    RUN_TEST(test_flood_below_threshold);
+    RUN_TEST(test_syn_rate_too_low);
+    RUN_TEST(test_long_flood_reported_once);
+    RUN_TEST(test_flood_again_after_pause);
+    RUN_TEST(test_spoofed_flood);
+    RUN_TEST(test_flood_blames_top_source);
+    RUN_TEST(test_syn_ack_is_not_flood);
+    RUN_TEST(test_fast_scan_is_not_flood);
+    RUN_TEST(test_floods_on_two_ports_are_separate);
     return UNITY_END();
 }
