@@ -19,7 +19,7 @@ int capture_read_file(const char *path, struct capture_stats *stats)
     struct pcap_pkthdr *hdr;
     const u_char *data;
     int rc;
-    while ((rc = pcap_next_ex(p, &hdr, &data)) == 1) {
+        while ((rc = pcap_next_ex(p, &hdr, &data)) == 1) {
         stats->packets++;
 
         struct packet pkt;
@@ -27,8 +27,10 @@ int capture_read_file(const char *path, struct capture_stats *stats)
             stats->bad++;
             continue;
         }
-        if (pkt.ethertype == ETHERTYPE_IPV4)
+        if (pkt.has_ipv4)
             stats->ipv4++;
+        if (pkt.has_tcp && (pkt.tcp_flags & TCP_SYN) && !(pkt.tcp_flags & TCP_ACK))
+            stats->syn++;
     }
 
     int result = 0;

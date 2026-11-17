@@ -4,6 +4,7 @@
 struct capture_stats {
     long packets;
     long ipv4;
+    long syn;
     long bad;
 };
 
