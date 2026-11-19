@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "core/event.h"
+#define IDS_ARP_REALERT_SEC 60
 #include "ids/parser.h"
 
 struct ids_thresholds {
