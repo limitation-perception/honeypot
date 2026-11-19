@@ -176,3 +176,9 @@ void ipv4_to_str(uint32_t ip, char *buf, size_t size)
     snprintf(buf, size, "%u.%u.%u.%u",
              (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF);
 }
+
+void mac_to_str(const uint8_t mac[MAC_LEN], char *buf, size_t size)
+{
+    snprintf(buf, size, "%02x:%02x:%02x:%02x:%02x:%02x",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}

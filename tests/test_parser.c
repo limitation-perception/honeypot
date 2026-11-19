@@ -239,6 +239,14 @@ static void test_ipv4_to_str(void)
     TEST_ASSERT_EQUAL_STRING("255.255.255.255", buf);
 }
 
+static void test_mac_to_str(void)
+{
+    const uint8_t mac[MAC_LEN] = { 0xde, 0xad, 0xbe, 0xef, 0x00, 0x01 };
+    char buf[MAC_STR_LEN];
+    mac_to_str(mac, buf, sizeof buf);
+    TEST_ASSERT_EQUAL_STRING("de:ad:be:ef:00:01", buf);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -259,6 +267,7 @@ int main(void)
     RUN_TEST(test_arp_request);
     RUN_TEST(test_arp_too_short);
     RUN_TEST(test_arp_for_other_networks_is_skipped);
+    RUN_TEST(test_mac_to_str);
     RUN_TEST(test_ipv4_to_str);
     return UNITY_END();
 }

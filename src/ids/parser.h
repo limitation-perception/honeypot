@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define MAC_LEN 6
+#define MAC_STR_LEN 18
 #define ETHERTYPE_IPV4 0x0800
 #define ETHERTYPE_ARP  0x0806
 #define ARP_OP_REQUEST 1
@@ -45,5 +46,7 @@ struct packet {
 int parse_ethernet(const uint8_t *data, size_t len, struct packet *out);
 
 void ipv4_to_str(uint32_t ip, char *buf, size_t size);
+
+void mac_to_str(const uint8_t mac[MAC_LEN], char *buf, size_t size);
 
 #endif
