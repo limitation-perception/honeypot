@@ -44,6 +44,7 @@ void tearDown(void)
 
 #define ATTACKER 0x0a000042u
 #define VICTIM   0x0a000002u
+#define GATEWAY  0x0a000001u
 
 static void tcp(int64_t t, uint32_t src, uint32_t dst, uint16_t port, uint8_t flags)
 {
@@ -55,6 +56,18 @@ static void tcp(int64_t t, uint32_t src, uint32_t dst, uint16_t port, uint8_t fl
     p.ip_dst = dst;
     p.dst_port = port;
     p.tcp_flags = flags;
+    detectors_feed(d, &p, t);
+}
+
+static void arp(int64_t t, uint32_t ip, uint8_t mac_last)
+{
+    struct packet p;
+    memset(&p, 0, sizeof p);
+    p.has_arp = true;
+    p.arp_op = ARP_OP_REPLY;
+    p.arp_spa = ip;
+    uint8_t mac[MAC_LEN] = { 0x02, 0x00, 0x00, 0x00, 0x00, mac_last };
+    memcpy(p.arp_sha, mac, MAC_LEN);
     detectors_feed(d, &p, t);
 }
 
@@ -71,6 +84,12 @@ static void scan(int64_t start, uint32_t src, int ports, int64_t step)
 {
     for (int i = 0; i < ports; i++)
         tcp(start + i * step, src, VICTIM, (uint16_t)(1 + i), TCP_SYN);
+}
+
+static void flood(int64_t start, uint32_t src, int count, int64_t step)
+{
+    for (int i = 0; i < count; i++)
+        tcp(start + i * step, src, VICTIM, 8080, TCP_SYN);
 }
 
 static void test_create_rejects_bad_input(void)
@@ -167,12 +186,6 @@ static void test_many_ips_do_not_break_tracking(void)
     TEST_ASSERT_EQUAL_INT(1, count_type(EV_PORT_SCAN));
 }
 
-static void flood(int64_t start, uint32_t src, int count, int64_t step)
-{
-    for (int i = 0; i < count; i++)
-        tcp(start + i * step, src, VICTIM, 8080, TCP_SYN);
-}
-
 static void test_syn_flood_detected(void)
 {
     flood(T0, ATTACKER, 100, 5 * MS);
@@ -253,6 +266,67 @@ static void test_floods_on_two_ports_are_separate(void)
     TEST_ASSERT_EQUAL_INT(2, count_type(EV_SYN_FLOOD));
 }
 
+static void test_consistent_arp_is_fine(void)
+{
+    for (int i = 0; i < 50; i++) {
+        arp(T0 + i * SEC, GATEWAY, 0x01);
+        arp(T0 + i * SEC, VICTIM, 0x02);
+    }
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_arp_spoof_detected(void)
+{
+    arp(T0, GATEWAY, 0x01);
+    arp(T0, ATTACKER, 0x66);
+    arp(T0 + SEC, GATEWAY, 0x66);
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL(EV_ARP_SPOOF, events[0].type);
+    TEST_ASSERT_EQUAL(EV_SOURCE_IDS, events[0].source);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.66", events[0].src_ip);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.1 is-at 02:00:00:00:00:66 (was 02:00:00:00:00:01), "
+                             "MAC owner: 10.0.0.66", events[0].details);
+}
+
+static void test_arp_spoof_unknown_owner(void)
+{
+    arp(T0, GATEWAY, 0x01);
+    arp(T0 + SEC, GATEWAY, 0x99);
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.1", events[0].src_ip);
+    TEST_ASSERT_NOT_NULL(strstr(events[0].details, "MAC owner: unknown"));
+}
+
+static void test_arp_spoof_not_repeated(void)
+{
+    arp(T0, GATEWAY, 0x01);
+    for (int i = 1; i <= 25; i++) {
+        arp(T0 + i * 2 * SEC, GATEWAY, 0x66);
+        arp(T0 + i * 2 * SEC + 1, GATEWAY, 0x01);
+    }
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+
+    arp(T0 + (2 + IDS_ARP_REALERT_SEC) * SEC, GATEWAY, 0x66);
+    TEST_ASSERT_EQUAL_INT(2, nevents);
+}
+
+static void test_second_attacker_is_reported(void)
+{
+    arp(T0, GATEWAY, 0x01);
+    arp(T0 + SEC, GATEWAY, 0x66);
+    arp(T0 + 2 * SEC, GATEWAY, 0x77);
+    TEST_ASSERT_EQUAL_INT(2, nevents);
+}
+
+static void test_arp_probe_ignored(void)
+{
+    arp(T0, 0, 0x01);
+    arp(T0 + SEC, 0, 0x02);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -277,5 +351,11 @@ int main(void)
     RUN_TEST(test_syn_ack_is_not_flood);
     RUN_TEST(test_fast_scan_is_not_flood);
     RUN_TEST(test_floods_on_two_ports_are_separate);
+    RUN_TEST(test_consistent_arp_is_fine);
+    RUN_TEST(test_arp_spoof_detected);
+    RUN_TEST(test_arp_spoof_unknown_owner);
+    RUN_TEST(test_arp_spoof_not_repeated);
+    RUN_TEST(test_second_attacker_is_reported);
+    RUN_TEST(test_arp_probe_ignored);
     return UNITY_END();
 }
