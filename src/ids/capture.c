@@ -1,13 +1,15 @@
 #define _DEFAULT_SOURCE
 
 #include "ids/capture.h"
+#include <errno.h>
+#include <poll.h>
 #include <string.h>
 #include <pcap/pcap.h>
 #include "core/log.h"
 #include "ids/parser.h"
 
 #define SNAPLEN    256
-#define TIMEOUT_MS 500
+#define POLL_MS    500
 
 static int set_filter(pcap_t *p)
 {
@@ -44,10 +46,22 @@ static int run(pcap_t *p, const struct ids_thresholds *th, ids_sink_fn sink, voi
         return -1;
     }
 
+    int fd = (stop != NULL) ? pcap_get_selectable_fd(p) : -1;
+
     struct pcap_pkthdr *hdr;
     const u_char *data;
     int rc = 0;
+    int result = 0;
     while (stop == NULL || !*stop) {
+        if (fd >= 0) {
+            struct pollfd pfd = { .fd = fd, .events = POLLIN };
+            if (poll(&pfd, 1, POLL_MS) < 0 && errno != EINTR) {
+                LOG_ERROR("poll: %s", strerror(errno));
+                result = -1;
+                break;
+            }
+        }
+
         rc = pcap_next_ex(p, &hdr, &data);
         if (rc == 0)
             continue;
@@ -70,7 +84,6 @@ static int run(pcap_t *p, const struct ids_thresholds *th, ids_sink_fn sink, voi
         detectors_feed(det, &pkt, ts_us);
     }
 
-    int result = 0;
     if (rc == PCAP_ERROR) {
         LOG_ERROR("capture error: %s", pcap_geterr(p));
         result = -1;
@@ -111,7 +124,6 @@ int capture_live(const char *ifname, const struct ids_thresholds *th,
     }
     pcap_set_snaplen(p, SNAPLEN);
     pcap_set_promisc(p, 1);
-    pcap_set_timeout(p, TIMEOUT_MS);
     pcap_set_immediate_mode(p, 1);
 
     int rc = pcap_activate(p);
@@ -126,6 +138,12 @@ int capture_live(const char *ifname, const struct ids_thresholds *th,
     }
     if (rc > 0)
         LOG_WARN("pcap_activate(%s): %s", ifname, pcap_geterr(p));
+
+    if (pcap_setnonblock(p, 1, errbuf) != 0) {
+        LOG_ERROR("pcap_setnonblock: %s", errbuf);
+        pcap_close(p);
+        return -1;
+    }
 
     LOG_INFO("IDS listening on %s", ifname);
     rc = run(p, th, sink, ctx, stop, stats);
