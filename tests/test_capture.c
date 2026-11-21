@@ -123,6 +123,19 @@ static void test_syn_flood_found_in_real_capture(void)
     TEST_ASSERT_EQUAL_INT(0, count_type(EV_PORT_SCAN));
 }
 
+static void test_arp_spoof_found_in_real_capture(void)
+{
+    struct capture_stats st;
+    TEST_ASSERT_EQUAL_INT(0, capture_read_file("samples/arpspoof.pcap", &DEFAULTS,
+                                               collect, NULL, &st));
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL(EV_ARP_SPOOF, events[0].type);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.66", events[0].src_ip);
+    TEST_ASSERT_EQUAL_STRING("10.0.0.1 is-at 02:00:00:00:00:66 (was 02:00:00:00:00:01), "
+                             "MAC owner: 10.0.0.66", events[0].details);
+}
+
 static void test_bad_interface(void)
 {
     volatile sig_atomic_t stop = 0;
@@ -185,6 +198,7 @@ int main(void)
     RUN_TEST(test_bad_thresholds);
     RUN_TEST(test_normal_traffic_gives_no_alerts);
     RUN_TEST(test_syn_flood_found_in_real_capture);
+    RUN_TEST(test_arp_spoof_found_in_real_capture);
     RUN_TEST(test_bad_interface);
     RUN_TEST(test_live_capture_on_loopback);
     return UNITY_END();
