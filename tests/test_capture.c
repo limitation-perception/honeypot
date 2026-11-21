@@ -29,11 +29,11 @@ static const struct ids_thresholds DEFAULTS = {
     .synflood_window_sec = 1,
 };
 
-static int count_port_scans(void)
+static int count_type(event_type_t type)
 {
     int n = 0;
     for (int i = 0; i < nevents && i < MAX_EVENTS; i++)
-        if (events[i].type == EV_PORT_SCAN)
+        if (events[i].type == type)
             n++;
     return n;
 }
@@ -100,6 +100,29 @@ static void test_bad_thresholds(void)
                                                 collect, NULL, &st));
 }
 
+static void test_normal_traffic_gives_no_alerts(void)
+{
+    struct capture_stats st;
+    TEST_ASSERT_EQUAL_INT(0, capture_read_file("samples/normal.pcap", &DEFAULTS,
+                                               collect, NULL, &st));
+    TEST_ASSERT_TRUE(st.packets > 0);
+    TEST_ASSERT_EQUAL_INT64(0, st.bad);
+    TEST_ASSERT_EQUAL_INT(0, nevents);
+}
+
+static void test_syn_flood_found_in_real_capture(void)
+{
+    struct capture_stats st;
+    TEST_ASSERT_EQUAL_INT(0, capture_read_file("samples/synflood.pcap", &DEFAULTS,
+                                               collect, NULL, &st));
+
+    TEST_ASSERT_EQUAL_INT(1, nevents);
+    TEST_ASSERT_EQUAL(EV_SYN_FLOOD, events[0].type);
+    TEST_ASSERT_EQUAL_STRING("127.0.0.1", events[0].src_ip);
+    TEST_ASSERT_EQUAL_UINT16(8000, events[0].dst_port);
+    TEST_ASSERT_EQUAL_INT(0, count_type(EV_PORT_SCAN));
+}
+
 static void test_bad_interface(void)
 {
     volatile sig_atomic_t stop = 0;
@@ -149,7 +172,7 @@ static void test_live_capture_on_loopback(void)
     pthread_join(t, NULL);
 
     TEST_ASSERT_EQUAL_INT(0, live_rc);
-    TEST_ASSERT_EQUAL_INT(1, count_port_scans());
+    TEST_ASSERT_EQUAL_INT(1, count_type(EV_PORT_SCAN));
 }
 
 int main(void)
@@ -160,6 +183,8 @@ int main(void)
     RUN_TEST(test_thresholds_are_used);
     RUN_TEST(test_missing_file);
     RUN_TEST(test_bad_thresholds);
+    RUN_TEST(test_normal_traffic_gives_no_alerts);
+    RUN_TEST(test_syn_flood_found_in_real_capture);
     RUN_TEST(test_bad_interface);
     RUN_TEST(test_live_capture_on_loopback);
     return UNITY_END();
