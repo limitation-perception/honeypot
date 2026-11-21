@@ -132,7 +132,8 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 23 -j REDIRECT --to-port 2222
 | `honeypot.port` | `2222` | TCP-порт пастки |
 | `honeypot.login_after` | `3` | з якої спроби «впустити» атакера |
 | `honeypot.max_clients` | `32` | максимум одночасних атакерів |
-| `ids.interface` | `eth0` | мережевий інтерфейс для захоплення; якщо він і `ids.pcap_file` порожні, IDS вимкнено || `ids.pcap_file` | *(порожньо)* | якщо задано, IDS читає цей `.pcap` замість інтерфейсу |
+| `ids.interface` | `eth0` | мережевий інтерфейс для захоплення; якщо він і `ids.pcap_file` порожні, IDS вимкнено |
+| `ids.pcap_file` | *(порожньо)* | якщо задано, IDS читає цей `.pcap` замість інтерфейсу |
 | `ids.portscan_ports` | `20` | стільки різних портів… |
 | `ids.portscan_window_sec` | `3` | …за стільки секунд дають `PORT_SCAN` |
 | `ids.synflood_syns` | `100` | стільки SYN-пакетів… |
@@ -151,6 +152,7 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 23 -j REDIRECT --to-port 2222
 Помилкою вважаються невідомий ключ, рядок без `=`, нечислове значення, значення поза допустимим діапазоном (наприклад, порт 70000) і задовге значення.
 
 ---
+
 ## IDS
 
 IDS — другий сенсор. Він бачить мережевий трафік через libpcap і повідомляє в чергу про три види атак. На кожну атаку приходить одна подія, а не подія на кожен пакет.
@@ -321,7 +323,8 @@ honeypot/
 │   ├── ids/
 │   │   ├── capture.c/.h       libpcap: файл або інтерфейс, BPF-фільтр
 │   │   ├── parser.c/.h        розбір Ethernet/IPv4/TCP/UDP/ARP
-│   │   └── detectors.c/.h     сканування портів, SYN-flood, ARP-spoofing│   └── storage/
+│   │   └── detectors.c/.h     сканування портів, SYN-flood, ARP-spoofing
+│   └── storage/
 │       ├── db.c/.h            SQLite
 │       └── report.c/.h        підсумок і HTML-звіт
 ├── tests/
@@ -329,7 +332,7 @@ honeypot/
 │   ├── db_check.h             допоміжні функції тестів для SQLite
 │   ├── fixtures/              тестові конфіги
 │   └── unity/                 фреймворк Unity
-├── samples/                   .pcap-зразки для тестів IDS і    скрипт запису ARP-атаки
+├── samples/                   .pcap-зразки для тестів IDS і скрипт запису ARP-атаки
 ├── config/honeytrap.conf
 ├── plans/                     плани етапів розробки
 └── Makefile
@@ -357,6 +360,7 @@ make test
 | `test_capture.c` | IDS на `samples/*.pcap`: на звичайному трафіку жодної події, на кожній атаці рівно одна; живе захоплення на `lo` |
 
 Тест живого захоплення потребує root, тож у звичайному `make test` він пропускається (`1 Ignored`). Запустити його окремо: `sudo ./build/tests/test_capture`.
+
 Багатопотоковий код рекомендовано перевіряти ще й так:
 
 ```sh
