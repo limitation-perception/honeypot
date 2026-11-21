@@ -11,6 +11,7 @@
 #include "core/log.h"
 #include "core/queue.h"
 #include "honeypot/honeypot.h"
+#include "ids/capture.h"
 #include "storage/db.h"
 #include "storage/report.h"
 
@@ -77,6 +78,38 @@ static void *honeypot_thread(void *arg)
     return NULL;
 }
 
+static void *ids_thread(void *arg)
+{
+    struct app *app = arg;
+    const struct config *cfg = &app->cfg;
+    struct ids_thresholds th = {
+        .portscan_ports      = cfg->ids_portscan_ports,
+        .portscan_window_sec = cfg->ids_portscan_window_sec,
+        .synflood_syns       = cfg->ids_synflood_syns,
+        .synflood_window_sec = cfg->ids_synflood_window_sec,
+    };
+    struct capture_stats st;
+    int rc;
+
+    if (cfg->ids_pcap_file[0] != '\0') {
+        LOG_INFO("IDS reading %s", cfg->ids_pcap_file);
+        rc = capture_read_file(cfg->ids_pcap_file, &th, queue_sink, app->queue, &st);
+    } else {
+        rc = capture_live(cfg->ids_interface, &th, queue_sink, app->queue, &g_stop, &st);
+    }
+
+    if (rc != 0)
+        LOG_WARN("IDS is disabled, honeypot keeps running");
+    else
+        LOG_INFO("IDS finished: %ld packets, %ld unparsable", st.packets, st.bad);
+    return NULL;
+}
+
+static bool ids_enabled(const struct config *cfg)
+{
+    return cfg->ids_pcap_file[0] != '\0' || cfg->ids_interface[0] != '\0';
+}
+
 static void *correlator_thread(void *arg)
 {
     struct app *app = arg;
@@ -96,7 +129,8 @@ static int run(struct app *app, const sigset_t *old_mask)
     if (!app->correlator)
         return -1;
 
-    pthread_t correlator_tid, honeypot_tid;
+    pthread_t correlator_tid, honeypot_tid, ids_tid;
+    bool ids_started = false;
     int err = pthread_create(&correlator_tid, NULL, correlator_thread, app);
     if (err != 0) {
         LOG_ERROR("cannot start correlator thread: %s", strerror(err));
@@ -110,12 +144,24 @@ static int run(struct app *app, const sigset_t *old_mask)
         return -1;
     }
 
+    if (ids_enabled(&app->cfg)) {
+        err = pthread_create(&ids_tid, NULL, ids_thread, app);
+        if (err != 0)
+            LOG_WARN("cannot start IDS thread: %s", strerror(err));
+        else
+            ids_started = true;
+    } else {
+        LOG_INFO("IDS is off: ids.interface and ids.pcap_file are empty");
+    }
+
     LOG_INFO("honeytrap started, press Ctrl+C to stop");
     while (!g_stop)
         sigsuspend(old_mask);
     LOG_INFO("shutting down");
 
     pthread_join(honeypot_tid, NULL);
+    if (ids_started)
+        pthread_join(ids_tid, NULL);
     queue_close(app->queue);
     pthread_join(correlator_tid, NULL);
     return app->honeypot_failed ? -1 : 0;
