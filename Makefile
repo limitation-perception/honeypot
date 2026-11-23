@@ -1,7 +1,7 @@
 CC      := gcc
 CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -Werror -g -Isrc -MMD -MP
 LDFLAGS :=
-LDLIBS  := -lpthread -lsqlite3
+LDLIBS  := -lpthread -lsqlite3 -lpcap
 
 ifeq ($(SAN),address)
 SANFLAGS := -fsanitize=address,undefined
