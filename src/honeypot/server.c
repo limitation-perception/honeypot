@@ -21,6 +21,7 @@
 #include "session.h"
 
 #define HP_LINE 256   
+#define HP_IDLE_SEC 300   
 
 static int make_server(int port)
 {
@@ -122,7 +123,7 @@ void honeypot_run(int port, int login_after, int max_clients,
         return;
     LOG_INFO("honeypot listening on port %d", port);
 
-    atomic_int live = 0;
+    static atomic_int live = 0;   
     uint32_t next_sid = 1;
 
     while (!*stop) {
@@ -136,8 +137,8 @@ void honeypot_run(int port, int login_after, int max_clients,
             continue;
         }
     
-        struct timeval no_to = { .tv_sec = 0, .tv_usec = 0 };
-        setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &no_to, sizeof no_to);
+        struct timeval idle = { .tv_sec = HP_IDLE_SEC, .tv_usec = 0 };
+        setsockopt(conn, SOL_SOCKET, SO_RCVTIMEO, &idle, sizeof idle);
         if (atomic_load(&live) >= max_clients) {
             net_send(conn, "Too many connections\r\n");
             close(conn);
@@ -170,7 +171,7 @@ void honeypot_run(int port, int login_after, int max_clients,
             continue;
         }
         pthread_detach(t);  
-
+    }
     close(srv);
     LOG_INFO("honeypot stopped");
 }
