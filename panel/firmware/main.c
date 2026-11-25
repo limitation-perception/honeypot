@@ -170,9 +170,6 @@ static void show_alert(enum level lvl, const char *ip, const char *msg)
     show_count();
 }
 
-/* ---------- Головна програма ---------- */
-
-/* Обробити один рядок від ноутбука. */
 static void handle_line(char *line)
 {
     enum level lvl;
@@ -180,11 +177,11 @@ static void handle_line(char *line)
     char *msg;
 
     if (!parse_line(line, &lvl, &ip, &msg))
-        return;                        /* незрозумілий рядок — ігноруємо */
+        return;                       
 
     alert_count++;
 
-    /* Рівень тільки зростає: алерт слабший за поточний лише збільшує лічильник. */
+    
     if (lvl < panel_level) {
         show_count();
         return;
